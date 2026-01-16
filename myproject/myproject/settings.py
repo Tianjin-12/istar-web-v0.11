@@ -187,4 +187,6 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 14  # 2周的秒数
 SECURE_BROWSER_XSS_FILTER = False
 SECURE_CONTENT_TYPE_NOSNIFF = False
+SESSION_COOKIE_SECURE = False         # 开发环境为 False，生产环境为 True
+SESSION_COOKIE_HTTPONLY = True
 ALLOWED_HOSTS = ['*']
