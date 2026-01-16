@@ -1,0 +1,319 @@
+{% load widget_tweaks %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户登录</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; form-action 'self';">
+    <style>
+        /* 基础样式 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
+            line-height: 1.5;
+        }
+        
+        /* 容器样式 */
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+        
+        .mt-5 {
+            margin-top: 3rem !important;
+        }
+        
+        /* 网格系统 */
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-right: -15px;
+            margin-left: -15px;
+        }
+        
+        .col-md-6 {
+            position: relative;
+            width: 100%;
+            padding-right: 15px;
+            padding-left: 15px;
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+        
+        .justify-content-center {
+            justify-content: center !important;
+        }
+        
+        /* 卡片样式 */
+        .card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            word-wrap: break-word;
+            background-color: #fff;
+            background-clip: border-box;
+            border: 1px solid rgba(0, 0, 0, 0.125);
+            border-radius: 0.5rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        
+        .card-header {
+            padding: 0.5rem 1rem;
+            margin-bottom: 0;
+            background-color: #0d6efd;
+            color: white;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+            border-top-left-radius: calc(0.5rem - 1px);
+            border-top-right-radius: calc(0.5rem - 1px);
+        }
+        
+        .card-body {
+            flex: 1 1 auto;
+            padding: 1rem;
+        }
+        
+        .card-footer {
+            padding: 0.5rem 1rem;
+            background-color: rgba(0, 0, 0, 0.03);
+            border-top: 1px solid rgba(0, 0, 0, 0.125);
+            border-bottom-right-radius: calc(0.5rem - 1px);
+            border-bottom-left-radius: calc(0.5rem - 1px);
+        }
+        
+        /* 标题样式 */
+        h3 {
+            font-size: 1.75rem;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            line-height: 1.2;
+        }
+        
+        .text-center {
+            text-align: center !important;
+        }
+        
+        /* 警告框样式 */
+        .alert {
+            position: relative;
+            padding: 0.75rem 1.25rem;
+            margin-bottom: 1rem;
+            border: 1px solid transparent;
+            border-radius: 0.375rem;
+        }
+        
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        
+        /* 表单样式 */
+        form {
+            margin-top: 0;
+        }
+        
+        .mb-3 {
+            margin-bottom: 1rem !important;
+        }
+        
+        .form-label {
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        .form-control {
+            display: block;
+            width: 100%;
+            padding: 0.375rem 0.75rem;
+            font-size: 1rem;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #212529;
+            background-color: #fff;
+            background-image: none;
+            border: 1px solid #ced4da;
+            border-radius: 0.375rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        
+        .form-control:focus {
+            color: #212529;
+            background-color: #fff;
+            border-color: #86b7fe;
+            outline: 0;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        .text-danger {
+            color: #dc3545 !important;
+            font-size: 0.875rem;
+            margin-top: 0.25rem;
+        }
+        
+        /* 复选框样式 */
+        .form-check {
+            display: block;
+            min-height: 1.5rem;
+            padding-left: 1.5em;
+            margin-bottom: 0.125rem;
+        }
+        
+        .form-check-input {
+            width: 1em;
+            height: 1em;
+            margin-top: 0.25em;
+            vertical-align: top;
+            background-color: #fff;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: contain;
+            border: 1px solid rgba(0, 0, 0, 0.25);
+            border-radius: 0.25em;
+            appearance: none;
+            cursor: pointer;
+        }
+        
+        .form-check-input[type="checkbox"] {
+            border-radius: 0.25em;
+        }
+        
+        .form-check-input:checked {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        
+        .form-check-input:checked[type="checkbox"] {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M6 10l3 3l6-6'/%3e%3c/svg%3e");
+        }
+        
+        .form-check-label {
+            color: #212529;
+            cursor: pointer;
+            margin-left: -1.5em;
+        }
+        
+        /* 按钮样式 */
+        .d-grid {
+            display: grid !important;
+        }
+        
+        .btn {
+            display: inline-block;
+            font-weight: 400;
+            line-height: 1.5;
+            color: #212529;
+            text-align: center;
+            text-decoration: none;
+            vertical-align: middle;
+            cursor: pointer;
+            user-select: none;
+            background-color: transparent;
+            border: 1px solid transparent;
+            padding: 0.375rem 0.75rem;
+            font-size: 1rem;
+            border-radius: 0.375rem;
+            transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+        
+        .btn-primary {
+            color: #fff;
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        
+        .btn-primary:hover {
+            color: #fff;
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+        }
+        
+        .btn-primary:focus {
+            color: #fff;
+            background-color: #0b5ed7;
+            border-color: #0a58ca;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.5);
+        }
+        
+        /* 链接样式 */
+        a {
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+        
+        a:hover {
+            color: #0a58ca;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 767.98px) {
+            .col-md-6 {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="text-center">用户登录</h3>
+                    </div>
+                    <div class="card-body">
+                        {% if form.errors %}
+                        <div class="alert alert-danger">
+                            您的用户名和密码不匹配，请重试。
+                        </div>
+                        {% endif %}
+                        
+                        <form method="post" action="{% url 'mvp:login' %}" novalidate>
+                            {% csrf_token %}
+                            
+                            <div class="mb-3">
+                                <label for="{{ form.username.id_for_label }}" class="form-label">用户名</label>
+                                {{ form.username|add_class:"form-control" }}
+                                {% for error in form.username.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="{{ form.password.id_for_label }}" class="form-label">密码</label>
+                                {{ form.password|add_class:"form-control" }}
+                                {% for error in form.password.errors %}
+                                <div class="text-danger">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="remember_me" name="remember_me">
+                                <label class="form-check-label" for="remember_me">记住我（保持2周登录状态）</label>
+                            </div>
+                            
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary">登录</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="card-footer text-center">
+                        <p>还没有账户？<a href="{% url 'mvp:register' %}" target="_blank">点击注册</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

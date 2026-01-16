@@ -1,0 +1,70 @@
+<!-- myproject/mvp/templates/mvp/dashboard.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI 可见度评估系统</title>
+    {% load plotly_dash %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            overflow-y: auto; /* 允许垂直滚动 */
+        }
+        #dashboard-container {
+            width: 100%;
+            min-height: 100vh;
+            height: auto;
+        }
+        /* 处理iframe滚动条 */
+        #dashboard-container iframe {
+            width: 100%;
+            min-height: 100vh;
+            height: auto;
+            border: none;
+        }
+    </style>
+</head>
+<body>    
+    <div id="dashboard-container">
+        {% load plotly_dash %}
+        {% plotly_app_bootstrap name="DashboardApp" %}
+    </div>
+    <script>
+        // 处理滚动条和高度问题
+        function adjustIframeHeight() {
+            const container = document.getElementById('dashboard-container');
+            const iframes = container.getElementsByTagName('iframe');
+            
+            // 设置body和html的高度
+            document.documentElement.style.height = '100%';
+            document.body.style.height = '100%';
+            
+            for (let i = 0; i < iframes.length; i++) {
+                // 移除固定高度，使用自动高度
+                iframes[i].style.height = 'auto';
+                iframes[i].style.minHeight = '100vh';
+                
+                // 确保iframe可以滚动
+                iframes[i].style.overflow = 'visible';
+            }
+            
+            // 确保容器可以滚动
+            container.style.overflow = 'visible';
+        }
+        
+        // 页面加载完成后调整
+        window.addEventListener('load', function() {
+            // 延迟执行以确保iframe完全加载
+            setTimeout(adjustIframeHeight, 500);
+        });
+        
+        // 窗口大小改变时调整
+        window.addEventListener('resize', adjustIframeHeight);
+    </script>
+</body>
+</html>
