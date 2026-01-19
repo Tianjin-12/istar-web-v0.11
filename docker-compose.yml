@@ -10,16 +10,26 @@ services:
       - postgres_data:/var/lib/postgresql/data/
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
-    image:  redis:7-alpine
+    image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   web:
     build: .
     command: >
-      sh -c "python myproject/manage.py migrate &&
+      sh -c "/app/docker-entrypoint.sh &&
              python myproject/manage.py collectstatic --noinput &&
              gunicorn --bind 0.0.0.0:8000 myproject.wsgi:application"
     volumes:
@@ -28,8 +38,10 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - DOCKER_ENV=1
       - POSTGRES_DB=mvpdb
@@ -42,12 +54,14 @@ services:
 
   celery:
     build: .
-    command: celery -A myproject worker -l info
+    command: sh -c "sleep 10 && celery -A myproject worker -l info"
     volumes:
       - .:/app
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - DOCKER_ENV=1
       - POSTGRES_DB=mvpdb
@@ -60,12 +74,14 @@ services:
 
   celery-beat:
     build: .
-    command: celery -A myproject beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: sh -c "sleep 10 && celery -A myproject beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - DOCKER_ENV=1
       - POSTGRES_DB=mvpdb
