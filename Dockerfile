@@ -19,7 +19,7 @@ RUN apt-get update \
         && rm -rf /var/lib/apt/lists/*
 
 # 安装Node.js (Dash需要)
-RUN curl -fsSL https://mirrors.aliyun.com/nodesource/setup_18.x | bash - \
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x  | bash - \
     && apt-get install -y nodejs
 
 # 复制requirements.txt并安装Python依赖
