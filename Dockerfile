@@ -16,6 +16,7 @@ RUN apt-get update \
         build-essential \
         curl \
         gnupg \
+        && rm -rf /var/lib/apt/lists/*
 
 # 复制requirements.txt并安装Python依赖
 COPY requirements.txt /app/

@@ -3,6 +3,17 @@ from openpyxl import Workbook
 import os
 import logging
 import traceback
+import sys
+from datetime import datetime, timedelta
+
+# 设置Django环境
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+
+import django
+django.setup()
+
+from mvp.models import ZhihuQuestion
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -13,10 +24,10 @@ def searching(keyword, base_dir=None):
     
     Args:
         keyword (str): 搜索关键词
-        base_dir (str, optional): 项目基础目录，用于定位文件
+        base_dir (str, optional): 项目基础目录,用于定位文件
     """
     try:
-        # 如果没有提供base_dir，则使用当前工作目录
+        # 如果没有提供base_dir,则使用当前工作目录
         if base_dir is None:
             base_dir = os.getcwd()
             
@@ -97,7 +108,7 @@ def searching(keyword, base_dir=None):
             result_list = page1.locator("//span[@class='Highlight']").all()
             logger.info(f"找到 {len(result_list)} 个搜索结果")
             
-            # 使用集合来存储已处理的问题，用于去重
+            # 使用集合来存储已处理的问题,用于去重
             seen_questions = set()
             index = 1
             
@@ -125,6 +136,89 @@ def searching(keyword, base_dir=None):
             
     except Exception as e:
         logger.error(f"搜索过程中发生错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise e
+
+# ========================================
+# 数据库适配函数
+# ========================================
+
+def check_zhihu_cache(keyword):
+    """检查知乎问题缓存(7天)"""
+    threshold = datetime.now() - timedelta(days=7)
+    cached_count = ZhihuQuestion.objects.filter(
+        keyword=keyword,
+        created_at__gte=threshold
+    ).count()
+    return cached_count > 0, cached_count
+
+def load_zhihu_questions(keyword):
+    """从数据库加载缓存的问题"""
+    threshold = datetime.now() - timedelta(days=7)
+    questions = list(ZhihuQuestion.objects.filter(
+        keyword=keyword,
+        created_at__gte=threshold
+    ).order_by('question_id').values('question_id', 'question_text'))
+    return questions
+
+def save_zhihu_questions_to_db(keyword, questions):
+    """保存知乎问题到数据库"""
+    # 先删除旧缓存
+    ZhihuQuestion.objects.filter(keyword=keyword).delete()
+    
+    # 批量插入新数据
+    question_objs = [
+        ZhihuQuestion(
+            keyword=keyword,
+            question_id=q['question_id'],
+            question_text=q['question_text']
+        )
+        for q in questions
+    ]
+    ZhihuQuestion.objects.bulk_create(question_objs, batch_size=100)
+
+def searching_with_db(keyword, use_cache=True):
+    """搜索知乎问题(数据库版本)"""
+    try:
+        # 缓存检查
+        if use_cache:
+            has_cache, count = check_zhihu_cache(keyword)
+            if has_cache:
+                logger.info(f"使用缓存: 找到 {count} 个问题")
+                return load_zhihu_questions(keyword)
+        
+        # 执行搜索(调用原有逻辑)
+        # 使用项目根目录作为base_dir
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        searching(keyword, base_dir=base_dir)
+        
+        # 读取 q.xlsx 并转换为数据库格式
+        excel_file_path = os.path.join(base_dir, 'q.xlsx')
+        from openpyxl import load_workbook
+        wb = load_workbook(excel_file_path)
+        sh = wb.active
+        
+        questions = []
+        for i, row in enumerate(sh.iter_rows(min_row=2, values_only=True), 1):
+            if row[0] and row[1]:
+                questions.append({
+                    'question_id': i,
+                    'question_text': row[1]
+                })
+        
+        # 保存到数据库
+        save_zhihu_questions_to_db(keyword, questions)
+        
+        # 删除临时文件
+        if os.path.exists(excel_file_path):
+            os.remove(excel_file_path)
+        
+        logger.info(f"成功保存 {len(questions)} 个问题到数据库")
+        
+        return questions
+        
+    except Exception as e:
+        logger.error(f"搜索知乎问题时出错: {str(e)}")
         logger.error(traceback.format_exc())
         raise e
 

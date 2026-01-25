@@ -189,6 +189,31 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Shanghai'
 
+# Celery任务队列配置
+CELERY_TASK_DEFAULT_QUEUE = 'normal'
+CELERY_TASK_DEFAULT_EXCHANGE = 'tasks'
+CELERY_TASK_DEFAULT_ROUTING_KEY = 'task.default'
+
+# 任务路由配置
+CELERY_TASK_ROUTES = {
+    'mvp.check_cache_status': {'queue': 'fast'},
+    'mvp.send_notification': {'queue': 'fast'},
+    'mvp.search_questions': {'queue': 'slow'},
+    'mvp.build_question_bank': {'queue': 'ml'},
+    'mvp.collect_ai_answers': {'queue': 'browser'},
+    'mvp.score_questions': {'queue': 'llm'},
+    'mvp.analyze_orders_by_keyword': {'queue': 'normal'},
+    'mvp.schedule_order_processing': {'queue': 'normal'},
+    'mvp.cleanup_old_data': {'queue': 'maintenance'},
+    'mvp.archive_old_data': {'queue': 'maintenance'},
+    'mvp.cleanup_backend': {'queue': 'maintenance'},
+}
+
+# 任务重试配置
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
 PLOTLY_DASH = {
     "ws_route": "dpd/ws/channel",
     "http_route": "dash/",

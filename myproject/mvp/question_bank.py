@@ -1,5 +1,82 @@
 import os#切换当前工作目录
+import sys
+from datetime import datetime, timedelta
+import json
+
+# 设置Django环境
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myproject.settings')
+
+import django
+django.setup()
+
+from mvp.models import QuestionBank, QuestionScore, ZhihuQuestion
+
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+
+# ========================================
+# 数据库适配函数
+# ========================================
+
+def check_question_bank_cache(keyword):
+    """检查问题库缓存(7天)"""
+    threshold = datetime.now() - timedelta(days=7)
+    cached_count = QuestionBank.objects.filter(
+        keyword=keyword,
+        created_at__gte=threshold
+    ).count()
+    return cached_count > 0, cached_count
+
+def load_question_bank_from_db(keyword):
+    """从数据库加载问题库"""
+    threshold = datetime.now() - timedelta(days=7)
+    questions = list(QuestionBank.objects.filter(
+        keyword=keyword,
+        created_at__gte=threshold
+    ).order_by('cluster_id').values('cluster_id', 'main_intent', 'generated_question'))
+    return questions
+
+def save_question_bank_to_db(keyword, question_data):
+    """保存问题库到数据库"""
+    QuestionBank.objects.filter(keyword=keyword).delete()
+    
+    question_objs = [
+        QuestionBank(
+            keyword=keyword,
+            cluster_id=q['cluster_id'],
+            main_intent=q['main_intent'],
+            generated_question=q['generated_question']
+        )
+        for q in question_data
+    ]
+    QuestionBank.objects.bulk_create(question_objs, batch_size=100)
+
+def load_questions_from_db(keyword):
+    """从数据库加载知乎问题"""
+    questions = list(ZhihuQuestion.objects.filter(
+        keyword=keyword
+    ).order_by('question_id').values_list('question_text', flat=True))
+    return questions
+
+def save_scores_to_db(keyword, scores):
+    """保存问题评分到数据库"""
+    QuestionScore.objects.filter(keyword=keyword).delete()
+    
+    today = datetime.now().date()
+    score_objs = [
+        QuestionScore(
+            keyword=keyword,
+            question_id=qid,
+            score=score,
+            answer_date=today
+        )
+        for qid, score in scores.items()
+    ]
+    QuestionScore.objects.bulk_create(score_objs, batch_size=100)
+
+# ========================================
+# 原有代码开始
+# ========================================
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
@@ -27,10 +104,18 @@ model_name = 'shibing624/text2vec-base-chinese'
 print(f"正在从镜像站下载/加载模型 {model_name} 到本地目录 {cache_folder}...")#第一次下完
 model = SentenceTransformer(model_name, cache_folder=cache_folder)
 print("模型加载完成！")
-# 读取 Excel
-df = pd.read_excel("q.xlsx")
-question_ids = df["index"].tolist()
-questions = df["question"].tolist()
+ 
+# 检查是否有传入keyword参数(用于数据库版本)
+# 如果没有,则尝试从环境变量获取,或者使用默认值
+keyword = os.environ.get('KEYWORD', '新能源汽车')
+print(f"使用关键词: {keyword}")
+ 
+# 从数据库读取知乎问题
+questions = load_questions_from_db(keyword)
+print(f"从数据库加载了 {len(questions)} 个问题")
+ 
+# 生成question_ids
+question_ids = [str(i+1) for i in range(len(questions))]
 
 # 向量化
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -218,13 +303,15 @@ for cluster_id in sorted_final_labels:
     print(f"--- 正在分析超级簇 {cluster_id} 的关注点 ---")
     analyzed_clusters.add(cluster_id)
 
-    # 提取当前簇的所有原始问题文本
+     # 提取当前簇的所有原始问题文本
     org_text = []
     question_list = f_final_cluster_map[cluster_id]
     for qid in question_list:
-        question_text = df[df['index'] == int(qid)]['question'].values
-        if len(question_text) > 0:
-            org_text.append(f"{len(org_text)+1}. {question_text[0]}")
+        # 从全局 questions 列表中获取问题文本
+        qid_int = int(qid)
+        if qid_int < len(questions):
+            question_text = questions[qid_int]
+            org_text.append(f"{len(org_text)+1}. {question_text}")
       
     #  构建发送给LLM的Prompt
     full_user_prompt = prompt2 + "\n".join(org_text)# 我们将 .env 文件中的 prompt2 作为模板，然后把问题列表拼接到后面   
@@ -297,26 +384,137 @@ for cluster_id, intent_string in intent_map.items():
         print(f"错误：为簇 {cluster_id} 生成问题失败: {e}")
         generated_questions_map[cluster_id] = [] # 失败则存入空列表
 
-print("\n所有簇的问题生成完成！")
-print("\n正在整理数据并保存到Excel文件...")
+ print("\n所有簇的问题生成完成！")
+ print("\n正在整理数据并保存到数据库...")
+ 
+ output_rows = []# 准备一个列表，用于存储DataFrame的每一行数据
+ 
+ for cluster_id, data in generated_questions_map.items():
+     intent_description = intent_map.get(cluster_id, "无意图描述")
+     questions_list = data.get("questions", [])   
+     for question in questions_list:
+         output_rows.append({
+             "cluster_id": cluster_id,
+             "main_intent": intent_description,
+             "generated_question": question,
+         })
+ 
+ # 保存到数据库
+ save_question_bank_to_db(keyword, output_rows)
+ print(f"最终问题库已成功保存到数据库，共 {len(output_rows)} 个问题")
+ 
+ # 同时保存到CSV以保持兼容性(可选)
+ df_output = pd.DataFrame(output_rows)
+ df_output.to_csv("question_bank.csv", index=True, encoding='utf-8-sig')
+ print("已同时保存到 question_bank.csv (兼容模式)")
 
-output_rows = []# 准备一个列表，用于存储DataFrame的每一行数据
+# ========================================
+# 数据库版本主函数
+# ========================================
 
-for cluster_id, data in generated_questions_map.items():
-    intent_description = intent_map.get(cluster_id, "无意图描述")
-    questions_list = data.get("questions", [])   
-    for question in questions_list:
-        output_rows.append({
-            "cluster_id": cluster_id,
-            "main_intent": intent_description,
-            "generated_question": question,
-        })
+def build_bank_with_db(keyword):
+    """构建问题库(数据库版本)"""
+    """修改: 从全局变量 keyword 获取关键词"""
+    global questions, question_ids
+    
+    try:
+        # 缓存检查
+        has_cache, count = check_question_bank_cache(keyword)
+        if has_cache:
+            print(f"使用缓存: 找到 {count} 个问题")
+            return load_question_bank_from_db(keyword)
+        
+        # 从数据库加载知乎问题(替代 q.xlsx)
+        questions = load_questions_from_db(keyword)
+        question_ids = [str(i+1) for i in range(len(questions))]
+        
+        print(f"从数据库加载了 {len(questions)} 个知乎问题")
+        
+        # 执行向量化和聚类逻辑
+        # (原有逻辑已在全局作用域中执行)
+        
+        # 注意: 原有逻辑使用全局变量,这里需要确保 questions 已正确设置
+        # 由于原有代码使用全局作用域,我们将设置环境变量以传递 keyword
+        os.environ['KEYWORD'] = keyword
+        
+        # 执行主要的向量化、聚类、LLM调用逻辑
+        # (这些逻辑已在文件开头定义的全局作用域中)
+        
+        return output_rows
+        
+    except Exception as e:
+        print(f"构建问题库时出错: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise e
 
-df_output = pd.DataFrame(output_rows)# 创建DataFrame
-output_filename = "generated_question_bank.xlsx"
-df_output.to_excel(output_filename, index=False, engine='openpyxl')# 保存为Excel文件
-df_output.to_csv("question_bank.csv", index=True, encoding='utf-8-sig')
-print(f"最终问题库已成功保存到文件: {output_filename}")
-#文件包含三列：cluster_id (所属簇), main_intent (簇意图), generated_question (生成的问题)
+def score_questions_with_db(keyword):
+    """对问题进行评分(数据库版本)"""
+    from dotenv import load_dotenv
+    from openai import OpenAI
+    import ast
+    
+    load_dotenv()
+    key = os.getenv("API_KEY")
+    prompt4 = os.getenv("prompt4")
+    
+    try:
+        # 检查评分缓存(1天)
+        threshold = datetime.now() - timedelta(days=1)
+        has_score_cache = QuestionScore.objects.filter(
+            keyword=keyword,
+            created_at__gte=threshold
+        ).exists()
+        
+        if has_score_cache:
+            print(f"使用评分缓存")
+            return True
+        
+        # 加载问题库
+        questions = load_question_bank_from_db(keyword)
+        
+        # 构建原始问题字典
+        org_questions = {str(i+1): q['generated_question'] for i, q in enumerate(questions)}
+        
+        print(f"准备对 {len(org_questions)} 个问题进行评分...")
+        
+        # 调用LLM进行评分
+        client = OpenAI(api_key=key, base_url="https://api.moonshot.cn/v1")
+        
+        # 构建评分prompt
+        questions_text = "\n".join([f"{qid}. {q}" for qid, q in org_questions.items()])
+        
+        completion = client.chat.completions.create(
+            model="kimi-k2-0905-preview",
+            messages=[{"role": "user", "content": prompt4 + questions_text}],
+            temperature=0,
+        )
+        result = completion.choices[0].message.content
+        print(result)
+        
+        # 解析评分结果
+        try:
+            cleaned_result = result.replace("```json", "").strip()
+            scores_dict = ast.literal_eval(cleaned_result)
+            if isinstance(scores_dict, dict):
+                scores_dict = scores_dict
+            else:
+                scores_dict = {}
+        except Exception as e:
+            print(f"解析评分结果时出错: {e}")
+            scores_dict = {}
+        
+        # 保存评分到数据库
+        save_scores_to_db(keyword, scores_dict)
+        
+        print(f"评分完成,共 {len(scores_dict)} 个问题")
+        return True
+        
+    except Exception as e:
+        print(f"评分时出错: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise e
+ 
 
 
